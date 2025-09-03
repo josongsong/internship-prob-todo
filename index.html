@@ -1,0 +1,188 @@
+import React, { useState, useCallback } from 'react';
+
+// 최대 히스토리 저장 개수
+const MAX_HISTORY_COUNT = 50;
+
+// 메인 앱 컴포넌트
+function App() {
+  const [todos, setTodos] = useState([]);
+  const [inputValue, setInputValue] = useState('');
+  const [history, setHistory] = useState({
+    undo: [],
+    redo: [],
+  });
+
+  /**
+   * 새로운 상태를 undo 스택에 추가하는 함수
+   * @param {Array} stateToPush - undo 스택에 추가할 todos 배열 상태
+   */
+  const pushToUndoStack = useCallback((stateToPush) => {
+    setHistory((prevHistory) => {
+      const newUndoStack = [...prevHistory.undo, stateToPush];
+      if (newUndoStack.length > MAX_HISTORY_COUNT) {
+        newUndoStack.shift();
+      }
+      // 새로운 액션이므로 redo 스택은 초기화
+      return {
+        undo: newUndoStack,
+        redo: [],
+      };
+    });
+  }, []);
+
+  /**
+   * 할 일 추가 핸들러
+   */
+  const handleAddTodo = (e) => {
+    e.preventDefault();
+    const text = inputValue.trim();
+    if (!text) return;
+
+    // 상태 변경 전에 현재 상태를 undo 스택에 저장
+    pushToUndoStack(todos);
+
+    const newTodo = { id: Date.now(), text, completed: false };
+    setTodos((prevTodos) => [...prevTodos, newTodo]);
+    setInputValue('');
+  };
+
+  /**
+   * 할 일 삭제 핸들러
+   */
+  const handleDeleteTodo = (id) => {
+    // 상태 변경 전에 현재 상태를 undo 스택에 저장
+    pushToUndoStack(todos);
+    setTodos((prevTodos) => prevTodos.filter((todo) => todo.id !== id));
+  };
+  
+  /**
+   * 할 일 완료/미완료 토글 핸들러 (히스토리에 기록 안 함)
+   */
+  const handleToggleTodo = (id) => {
+    setTodos((prevTodos) =>
+      prevTodos.map((todo) =>
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo
+      )
+    );
+  };
+
+  /**
+   * 되돌리기(Undo) 핸들러
+   */
+  const handleUndo = useCallback(() => {
+    if (history.undo.length === 0) return;
+
+    const lastState = history.undo[history.undo.length - 1];
+    
+    // 현재 상태를 redo 스택에 추가
+    setHistory({
+      undo: history.undo.slice(0, -1),
+      redo: [todos, ...history.redo],
+    });
+
+    // 이전 상태로 복원
+    setTodos(lastState);
+  }, [history, todos]);
+
+  /**
+   * 다시하기(Redo) 핸들러
+   */
+  const handleRedo = useCallback(() => {
+    if (history.redo.length === 0) return;
+    
+    const nextState = history.redo[0];
+    
+    // 현재 상태를 undo 스택에 추가
+    setHistory({
+      undo: [...history.undo, todos],
+      redo: history.redo.slice(1),
+    });
+
+    // 다음 상태로 복원
+    setTodos(nextState);
+  }, [history, todos]);
+
+  return (
+    <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center pt-10 font-sans">
+      <div className="w-full max-w-lg bg-gray-800 rounded-xl shadow-2xl p-6 space-y-6">
+        <header className="text-center">
+          <h1 className="text-3xl font-bold text-purple-400">Undo/Redo To-Do App</h1>
+          <p className="text-gray-400 mt-2">'추가'와 '삭제' 작업만 되돌릴 수 있습니다.</p>
+        </header>
+
+        {/* --- 컨트롤 버튼 --- */}
+        <div className="flex items-center justify-center space-x-4">
+          <button
+            onClick={handleUndo}
+            disabled={history.undo.length === 0}
+            className="px-5 py-2 bg-blue-600 rounded-lg font-semibold hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors duration-200 flex items-center space-x-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" /></svg>
+            <span>Undo</span>
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={history.redo.length === 0}
+            className="px-5 py-2 bg-green-600 rounded-lg font-semibold hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors duration-200 flex items-center space-x-2"
+          >
+            <span>Redo</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          </button>
+        </div>
+
+        {/* --- 할 일 추가 폼 --- */}
+        <form onSubmit={handleAddTodo} className="flex space-x-2">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="새로운 할 일을 입력하세요..."
+            className="flex-grow p-3 bg-gray-900 border-2 border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200"
+          />
+          <button
+            type="submit"
+            className="px-5 py-2 bg-purple-600 rounded-lg font-semibold hover:bg-purple-500 transition-colors duration-200"
+          >
+            추가
+          </button>
+        </form>
+
+        {/* --- 할 일 목록 --- */}
+        <div className="space-y-3">
+          {todos.length > 0 ? (
+            todos.map((todo) => (
+              <div
+                key={todo.id}
+                className="flex items-center justify-between bg-gray-700 p-3 rounded-lg"
+              >
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    checked={todo.completed}
+                    onChange={() => handleToggleTodo(todo.id)}
+                    className="h-5 w-5 rounded bg-gray-800 border-gray-600 text-purple-500 focus:ring-purple-600"
+                  />
+                  <span className={`${todo.completed ? 'line-through text-gray-500' : ''}`}>
+                    {todo.text}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleDeleteTodo(todo.id)}
+                  className="text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="text-center text-gray-500">할 일이 없습니다. 추가해보세요!</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
